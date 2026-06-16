@@ -21,7 +21,16 @@ exports.handler = async function(event) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 4000,
-        messages: [{ role: 'user', content: prompt }]
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          },
+          {
+            role: 'assistant',
+            content: '{'
+          }
+        ]
       })
     });
 
@@ -31,10 +40,13 @@ exports.handler = async function(event) {
       return { statusCode: response.status, body: JSON.stringify({ error: data.error?.message || 'Erro na API.' }) };
     }
 
+    // Reconstrói o JSON completo
+    const rawText = '{' + data.content.map(i => i.text || '').join('');
+
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify(data)
+      body: JSON.stringify({ content: [{ type: 'text', text: rawText }] })
     };
 
   } catch (err) {

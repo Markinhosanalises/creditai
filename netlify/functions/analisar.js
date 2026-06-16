@@ -21,16 +21,7 @@ exports.handler = async function(event) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 4000,
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          },
-          {
-            role: 'assistant',
-            content: '{'
-          }
-        ]
+        messages: [{ role: 'user', content: prompt }]
       })
     });
 
@@ -40,13 +31,18 @@ exports.handler = async function(event) {
       return { statusCode: response.status, body: JSON.stringify({ error: data.error?.message || 'Erro na API.' }) };
     }
 
-    // Reconstrói o JSON completo
-    const rawText = '{' + data.content.map(i => i.text || '').join('');
+    const rawText = data.content.map(i => i.text || '').join('');
+
+    // Extrai só o JSON mesmo que venha com texto extra
+    const match = rawText.match(/\{[\s\S]*\}/);
+    if (!match) {
+      return { statusCode: 500, body: JSON.stringify({ error: 'JSON não encontrado na resposta.' }) };
+    }
 
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify({ content: [{ type: 'text', text: rawText }] })
+      body: JSON.stringify({ content: [{ type: 'text', text: match[0] }] })
     };
 
   } catch (err) {

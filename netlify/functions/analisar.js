@@ -20,7 +20,7 @@ exports.handler = async function(event) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
+        max_tokens: 2000,
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -32,8 +32,6 @@ exports.handler = async function(event) {
     }
 
     const rawText = data.content.map(i => i.text || '').join('');
-
-    // Extrai só o JSON mesmo que venha com texto extra
     const match = rawText.match(/\{[\s\S]*\}/);
     if (!match) {
       return { statusCode: 500, body: JSON.stringify({ error: 'JSON não encontrado na resposta.' }) };

@@ -109,6 +109,20 @@ body {
 .field select option { background: var(--surface2); }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
+.upload-box {
+  background: var(--surface2);
+  border: 1.5px dashed var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  font-size: 12px;
+  color: var(--label);
+}
+.upload-box:hover { border-color: var(--accent); background: rgba(59,110,248,0.04); }
+#upload-selected { font-size: 13px; color: var(--text); }
+
 .cnpj-input {
   font-family: 'DM Mono', monospace !important;
   font-size: 16px !important;
@@ -388,6 +402,23 @@ body {
       <input type="text" id="cnpj" class="cnpj-input" placeholder="00.000.000/0000-00" maxlength="18">
     </div>
 
+    <div class="field">
+      <label>Consulta de pendência financeira (opcional)</label>
+      <div class="upload-box" id="upload-box" onclick="document.getElementById('file-input').click()">
+        <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg" style="display:none" onchange="handleFileSelect(event)">
+        <div id="upload-placeholder">
+          <span style="font-size:20px">📎</span>
+          <div style="margin-top:6px">Anexar PDF ou imagem de uma consulta que você já tem</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Serasa, SPC, CENPROT, etc — complementa a análise da IA</div>
+        </div>
+        <div id="upload-selected" style="display:none">
+          <span style="font-size:18px">✅</span>
+          <span id="upload-filename" style="margin-left:6px"></span>
+          <span onclick="event.stopPropagation(); removerArquivo()" style="margin-left:10px;color:var(--red);cursor:pointer">✕ remover</span>
+        </div>
+      </div>
+    </div>
+
     <div class="error-box" id="error-box"></div>
 
     <button class="btn-analisar" id="btn-analisar" onclick="iniciarAnalise()">
@@ -434,6 +465,41 @@ document.getElementById('cnpj').addEventListener('input', function(e) {
 });
 
 let credits = 10;
+let arquivoAnexado = null; // { base64, mediaType, filename }
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const tiposPermitidos = ['application/pdf', 'image/png', 'image/jpeg'];
+  if (!tiposPermitidos.includes(file.type)) {
+    mostrarErro('Formato não suportado. Use PDF, PNG ou JPG.');
+    return;
+  }
+
+  if (file.size > 8 * 1024 * 1024) {
+    mostrarErro('Arquivo muito grande (máximo 8MB).');
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function() {
+    const base64 = reader.result.split(',')[1];
+    arquivoAnexado = { base64, mediaType: file.type, filename: file.name };
+    document.getElementById('upload-placeholder').style.display = 'none';
+    document.getElementById('upload-selected').style.display = 'block';
+    document.getElementById('upload-filename').textContent = file.name;
+  };
+  reader.onerror = function() { mostrarErro('Erro ao ler o arquivo.'); };
+  reader.readAsDataURL(file);
+}
+
+function removerArquivo() {
+  arquivoAnexado = null;
+  document.getElementById('file-input').value = '';
+  document.getElementById('upload-placeholder').style.display = 'block';
+  document.getElementById('upload-selected').style.display = 'none';
+}
 
 function mostrarErro(msg) { const el = document.getElementById('error-box'); el.textContent = msg; el.style.display = 'block'; }
 function esconderErro() { document.getElementById('error-box').style.display = 'none'; }
@@ -441,6 +507,7 @@ function voltarHome() {
   document.getElementById('screen-report').style.display = 'none';
   document.getElementById('screen-loading').style.display = 'none';
   document.getElementById('screen-home').style.display = 'flex';
+  removerArquivo();
 }
 
 function setStep(n) {
@@ -465,7 +532,7 @@ async function gerarRelatorioIA(dadosCNPJ, contexto) {
   const socios = (empresa.qsa || []).map(s => `${s.nome_socio} (${s.qualificacao_socio})`).join(', ') || 'Não informado';
   const cnaes = [empresa.cnae_fiscal_descricao, ...(empresa.cnaes_secundarios || []).slice(0,3).map(c => c.descricao)].filter(Boolean).join('; ');
 
-  const prompt = `Você é um especialista em análise de crédito empresarial brasileiro. Analise os dados abaixo e gere um relatório completo em JSON.
+  const prompt = `Você é um analista de crédito empresarial brasileiro sênior, especialista no segmento informado. Seja específico e direto, evite frases genéricas — cite números, prazos e nomes concretos sempre que possível. Responda rápido e com objetividade, sem rodeios.
 
 DADOS DA EMPRESA (Receita Federal):
 - Razão Social: ${empresa.razao_social}
@@ -483,34 +550,39 @@ DADOS DA EMPRESA (Receita Federal):
 - MEI: ${empresa.opcao_pelo_mei ? 'Sim' : 'Não'}
 
 CONTEXTO DA NEGOCIAÇÃO:
-- Fornecedor/Segmento: ${contexto.segmento || 'Não informado'}
-- Valor da venda: R$ ${contexto.valor || 'Não informado'}
-- Forma de pagamento: ${contexto.pagamento || 'Não informado'}
+- Fornecedor/Segmento do vendedor: ${contexto.segmento || 'Não informado'}
+- Valor da venda pretendida: R$ ${contexto.valor || 'Não informado'}
+- Forma de pagamento pretendida: ${contexto.pagamento || 'Não informado'}
+${arquivoAnexado ? '\nO usuário anexou um documento (consulta de pendência financeira de fonte como Serasa, SPC, CENPROT, etc). Leia o conteúdo do documento anexado e USE essas informações reais para enriquecer os fatores de risco, alertas, score e parecer — dê prioridade aos dados do documento anexado sobre estimativas, já que são dados reais e mais confiáveis.' : ''}
 
-Responda SOMENTE com JSON válido, sem markdown, sem texto extra:
+Gere exatamente 4 fatores de risco (cobrindo: histórico/tempo de mercado, porte/capital social, natureza jurídica e estrutura societária, e adequação ao CNAE/segmento${arquivoAnexado ? ', incorporando o que encontrar no documento anexado' : ''}) e exatamente 3 alertas (sendo ao menos 1 positivo e 1 ponto de atenção real, nunca genérico — baseie-se nos dados reais acima, como tempo de atividade, capital social baixo/alto para o porte, quantidade de sócios, etc${arquivoAnexado ? ', e em qualquer pendência/score encontrado no documento anexado' : ''}).
+
+A sugestão de negociação deve ser coerente com o valor e forma de pagamento informados pelo vendedor — se o valor for alto em relação ao capital social da empresa, isso deve refletir no limite e nas condições sugeridas.
+
+Responda SOMENTE com JSON válido, sem markdown, sem texto fora do JSON:
 
 {
-  "score": <número 0-1000>,
+  "score": <número 0-1000, calculado considerando situação cadastral, tempo de mercado, porte, capital social${arquivoAnexado ? ' e dados do documento anexado' : ''}>,
   "score_descricao": "<Ruim/Regular/Bom/Muito Bom/Excelente>",
   "score_cor": "<red/yellow/green>",
-  "score_faixa": "<descrição da faixa de risco>",
+  "score_faixa": "<descrição objetiva da faixa de risco, ex: '700-799 · Risco Baixo-Médio'>",
   "situacao_badge": "<Ativa/Irregular/Baixada/Suspensa>",
   "situacao_cor": "<green/yellow/red>",
-  "tempo_mercado": "<X anos>",
-  "faturamento_estimado": "<estimativa>",
-  "funcionarios_estimado": "<estimativa>",
+  "tempo_mercado": "<X anos, calculado a partir da data de abertura>",
+  "faturamento_estimado": "<estimativa em R$ baseada no porte/CNAE, com justificativa implícita>",
+  "funcionarios_estimado": "<estimativa numérica realista para o porte>",
   "risco_geral": "<Baixo/Médio/Alto>",
   "fatores_risco": [
-    { "nome": "<fator>", "pct": <0-100>, "cor": "<green/yellow/red>", "desc": "<descrição curta>" }
+    { "nome": "<fator específico>", "pct": <0-100>, "cor": "<green/yellow/red>", "desc": "<descrição concreta citando o dado real, máx 90 caracteres>" }
   ],
   "alertas": [
-    { "tipo": "<green/yellow/red>", "titulo": "<título>", "texto": "<descrição>" }
+    { "tipo": "<green/yellow/red>", "titulo": "<título específico>", "texto": "<descrição concreta baseada nos dados reais, máx 140 caracteres>" }
   ],
-  "parecer": "<parecer executivo em 2 parágrafos curtos, máximo 400 caracteres no total>",
-  "sugestao_limite": "<valor>",
-  "sugestao_prazo": "<prazo>",
-  "sugestao_produto": "<produto>",
-  "sugestao_condicao": "<condição>",
+  "parecer": "<parecer executivo em 2-3 parágrafos objetivos, citando dados concretos da empresa e da negociação proposta, máximo 700 caracteres no total>",
+  "sugestao_limite": "<valor em R$ coerente com capital social e porte>",
+  "sugestao_prazo": "<prazo específico, ex: '30/60 dias' ou 'até 6x'>",
+  "sugestao_produto": "<modalidade específica adequada ao segmento informado>",
+  "sugestao_condicao": "<observação prática, ex: 'Sujeito a entrada de 30%' ou 'Sem restrições adicionais', máx 60 caracteres>",
   "recomendacao_final": "<APROVAR/APROVAR COM RESSALVAS/NEGAR>",
   "recomendacao_cor": "<green/yellow/red>"
 }`;
@@ -519,7 +591,10 @@ Responda SOMENTE com JSON válido, sem markdown, sem texto extra:
   const response = await fetch('/.netlify/functions/analisar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt })
+    body: JSON.stringify({
+      prompt,
+      anexo: arquivoAnexado ? { base64: arquivoAnexado.base64, mediaType: arquivoAnexado.mediaType } : null
+    })
   });
 
   if (!response.ok) {

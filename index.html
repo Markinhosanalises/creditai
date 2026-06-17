@@ -575,59 +575,70 @@ async function gerarRelatorioIA(dadosCNPJ, contexto) {
   const socios = (empresa.qsa || []).map(s => `${s.nome_socio} (${s.qualificacao_socio})`).join(', ') || 'Não informado';
   const cnaes = [empresa.cnae_fiscal_descricao, ...(empresa.cnaes_secundarios || []).slice(0,3).map(c => c.descricao)].filter(Boolean).join('; ');
 
-  const prompt = `Você é um analista de crédito empresarial brasileiro sênior, especialista no segmento informado. Seja específico e direto, evite frases genéricas — cite números, prazos e nomes concretos sempre que possível. Responda rápido e com objetividade, sem rodeios.
+  const prompt = `Você é uma Analista Sênior de Crédito, Cadastro e Risco Financeiro, especializada em análise empresarial (CNPJ), compliance, capacidade de pagamento e inteligência comercial. Gere um relatório executivo completo, com linguagem técnica de analista de crédito real — nunca genérica. Cite números, prazos e dados concretos sempre que possível. Seja direto e objetivo.
 
-DADOS DA EMPRESA (Receita Federal):
+IMPORTANTE SOBRE FONTES: você só tem acesso a dados cadastrais oficiais da Receita Federal${arquivoAnexado ? ' e ao documento anexado pelo usuário (que pode ser uma consulta de protesto, score, ou demonstrativo financeiro)' : ''}. Você NÃO tem acesso a bases de Serasa, SPC, CENPROT, processos judiciais, PEP ou listas de sanções em tempo real — portanto, para qualquer campo que dependa dessas fontes e não haja documento anexado confirmando, classifique como "Não verificado nesta consulta" em vez de inventar um valor. Isso é uma exigência de compliance: nunca apresente uma estimativa como se fosse um dado oficial verificado.
+
+DADOS DA EMPRESA (Receita Federal — fonte oficial verificada):
 - Razão Social: ${empresa.razao_social}
+- Nome Fantasia: ${empresa.nome_fantasia || 'Não informado'}
 - CNPJ: ${empresa.cnpj}
-- Situação: ${empresa.descricao_situacao_cadastral}
+- Situação Cadastral: ${empresa.descricao_situacao_cadastral}
 - Data Abertura: ${empresa.data_inicio_atividade}
 - Porte: ${empresa.porte}
 - Natureza Jurídica: ${empresa.natureza_juridica?.descricao || 'N/A'}
 - Capital Social: R$ ${empresa.capital_social}
 - Endereço: ${empresa.logradouro}, ${empresa.municipio?.descricao || ''} - ${empresa.uf}
-- Sócios: ${socios}
+- Telefone: ${empresa.ddd_telefone_1 || 'Não informado'}
+- Sócios (Quadro Societário): ${socios}
 - CNAE Principal: ${empresa.cnae_fiscal_descricao}
 - CNAEs Secundários: ${cnaes}
-- Optante Simples: ${empresa.opcao_pelo_simples ? 'Sim' : 'Não'}
+- Optante Simples Nacional: ${empresa.opcao_pelo_simples ? 'Sim' : 'Não'}
 - MEI: ${empresa.opcao_pelo_mei ? 'Sim' : 'Não'}
 
-CONTEXTO DA NEGOCIAÇÃO:
+CONTEXTO DA NEGOCIAÇÃO PROPOSTA:
 - Fornecedor/Segmento do vendedor: ${contexto.segmento || 'Não informado'}
 - Valor da venda pretendida: R$ ${contexto.valor || 'Não informado'}
 - Forma de pagamento pretendida: ${contexto.pagamento || 'Não informado'}
-${arquivoAnexado ? '\nO usuário anexou um documento (consulta de pendência financeira de fonte como Serasa, SPC, CENPROT, etc). Leia o conteúdo do documento anexado e USE essas informações reais para enriquecer os fatores de risco, alertas, score e parecer — dê prioridade aos dados do documento anexado sobre estimativas, já que são dados reais e mais confiáveis.' : ''}
+${arquivoAnexado ? '\nDOCUMENTO ANEXADO: o usuário anexou um documento complementar (pode ser consulta de protesto, relatório de score, balanço, DRE ou outro demonstrativo financeiro). Leia e extraia TODOS os dados relevantes dele — financeiros (receita, lucro, endividamento, liquidez), de restrição (protestos, dívidas, score externo) ou societários. Esses dados são reais e devem ser tratados como fonte verificada, com prioridade sobre estimativas. Cite explicitamente no parecer que a informação veio do documento anexado.' : '\nNenhum documento foi anexado nesta consulta — a análise financeira detalhada (receita, EBITDA, liquidez, endividamento) não pode ser calculada e deve ser marcada como não disponível, e não estimada como se fosse real.'}
 
-Gere exatamente 4 fatores de risco (cobrindo: histórico/tempo de mercado, porte/capital social, natureza jurídica e estrutura societária, e adequação ao CNAE/segmento${arquivoAnexado ? ', incorporando o que encontrar no documento anexado' : ''}) e exatamente 3 alertas (sendo ao menos 1 positivo e 1 ponto de atenção real, nunca genérico — baseie-se nos dados reais acima, como tempo de atividade, capital social baixo/alto para o porte, quantidade de sócios, etc${arquivoAnexado ? ', e em qualquer pendência/score encontrado no documento anexado' : ''}).
-
-A sugestão de negociação deve ser coerente com o valor e forma de pagamento informados pelo vendedor — se o valor for alto em relação ao capital social da empresa, isso deve refletir no limite e nas condições sugeridas.
+INSTRUÇÕES DE ANÁLISE:
+1. Gere exatamente 5 fatores de risco cobrindo: histórico/tempo de mercado, porte e capital social, natureza jurídica e estrutura societária, adequação ao CNAE/segmento da negociação, e situação cadastral${arquivoAnexado ? '. Se o documento anexado trouxer dados financeiros, substitua um desses fatores por "Saúde Financeira" baseado nele' : ''}.
+2. Gere exatamente 4 alertas: pelo menos 1 positivo (🟢), pelo menos 1 ponto de atenção real (🟠) e, se aplicável, 1 crítico (🔴) — nunca genéricos, sempre referenciando um dado concreto acima. Se não houver nenhum ponto crítico real, gere um alerta neutro informando que protestos/processos judiciais não foram verificados nesta consulta por falta de acesso a essas bases.
+3. A sugestão de negociação deve ser proporcional ao capital social, porte e, se houver, aos dados financeiros do documento anexado — nunca um valor genérico desconectado da empresa analisada.
+4. No parecer, responda objetivamente: a empresa aparenta ser saudável cadastralmente? Há indício de risco de concentração ou dependência? O que falta verificar para uma decisão definitiva (sempre mencione a limitação de fontes quando relevante)?
+5. O veredito final deve refletir o nível real de informação disponível — se não houver dados de protesto/judicial e nem documento anexado, o veredito correto tende a ser "APROVAR COM RESSALVAS" (recomendando complementar com consulta de protesto/score antes da decisão final), não uma aprovação plena sem essas verificações.
 
 Responda SOMENTE com JSON válido, sem markdown, sem texto fora do JSON:
 
 {
-  "score": <número 0-1000, calculado considerando situação cadastral, tempo de mercado, porte, capital social${arquivoAnexado ? ' e dados do documento anexado' : ''}>,
+  "score": <número 0-1000, calculado considerando situação cadastral, tempo de mercado, porte, capital social${arquivoAnexado ? ' e dados do documento anexado' : ''}; se faltar dado de protesto/judicial, o score não deve passar de 850, refletindo a limitação de verificação>,
   "score_descricao": "<Ruim/Regular/Bom/Muito Bom/Excelente>",
   "score_cor": "<red/yellow/green>",
-  "score_faixa": "<descrição objetiva da faixa de risco, ex: '700-799 · Risco Baixo-Médio'>",
+  "score_faixa": "<classificação por faixa: 900-1000 Excelente, 800-899 Muito Bom, 700-799 Bom, 600-699 Moderado, 500-599 Alto risco, abaixo de 500 Crítico — inclua a faixa numérica e o nome>",
   "situacao_badge": "<Ativa/Irregular/Baixada/Suspensa>",
   "situacao_cor": "<green/yellow/red>",
   "tempo_mercado": "<X anos, calculado a partir da data de abertura>",
-  "faturamento_estimado": "<estimativa em R$ baseada no porte/CNAE, com justificativa implícita>",
-  "funcionarios_estimado": "<estimativa numérica realista para o porte>",
+  "faturamento_estimado": "<se houver documento anexado com dado real, use-o e indique '(documento anexado)'; senão, estime com base no porte/CNAE e indique '(estimativa)'>",
+  "funcionarios_estimado": "<estimativa numérica realista para o porte, indicando '(estimativa)'>",
   "risco_geral": "<Baixo/Médio/Alto>",
   "fatores_risco": [
     { "nome": "<fator específico>", "pct": <0-100>, "cor": "<green/yellow/red>", "desc": "<descrição concreta citando o dado real, máx 90 caracteres>" }
   ],
   "alertas": [
-    { "tipo": "<green/yellow/red>", "titulo": "<título específico>", "texto": "<descrição concreta baseada nos dados reais, máx 140 caracteres>" }
+    { "tipo": "<green/yellow/red>", "titulo": "<título específico>", "texto": "<descrição concreta baseada nos dados reais ou limitação de fonte, máx 140 caracteres>" }
   ],
-  "parecer": "<parecer executivo em 2-3 parágrafos objetivos, citando dados concretos da empresa e da negociação proposta, máximo 700 caracteres no total>",
-  "sugestao_limite": "<valor em R$ coerente com capital social e porte>",
+  "diagnostico_pagamento": "<resposta direta e curta: a empresa aparenta ter capacidade de honrar o compromisso proposto? máx 200 caracteres>",
+  "diagnostico_risco_juridico_fiscal": "<resposta direta: há indício de risco jurídico ou fiscal nos dados disponíveis, e o que não foi possível verificar? máx 200 caracteres>",
+  "parecer": "<parecer executivo em 2-3 parágrafos objetivos, citando dados concretos da empresa, da negociação proposta e das limitações de fonte quando aplicável, máximo 800 caracteres no total>",
+  "sugestao_limite": "<valor em R$ coerente com capital social, porte e dados financeiros se houver>",
   "sugestao_prazo": "<prazo específico, ex: '30/60 dias' ou 'até 6x'>",
   "sugestao_produto": "<modalidade específica adequada ao segmento informado>",
-  "sugestao_condicao": "<observação prática, ex: 'Sujeito a entrada de 30%' ou 'Sem restrições adicionais', máx 60 caracteres>",
+  "sugestao_garantia": "<garantia recomendada, ex: 'Nota promissória', 'Sem garantia adicional necessária', 'Avalista recomendado', máx 60 caracteres>",
+  "sugestao_condicao": "<observação prática adicional, ex: 'Sujeito a entrada de 30%' ou 'Recomenda-se consulta de protesto antes da liberação', máx 100 caracteres>",
   "recomendacao_final": "<APROVAR/APROVAR COM RESSALVAS/NEGAR>",
-  "recomendacao_cor": "<green/yellow/red>"
+  "recomendacao_cor": "<green/yellow/red>",
+  "recomendacao_justificativa": "<justificativa técnica curta para o veredito, máx 150 caracteres>"
 }`;
 
   // Chama a Netlify Function (backend) em vez da API diretamente
@@ -762,6 +773,17 @@ function renderReport(cnpjData, ia, contexto) {
       ${alertasHTML||'<div style="color:var(--muted);font-size:12px">Nenhum alerta identificado.</div>'}
     </div>
 
+    <div class="cards-2">
+      <div class="card">
+        <div class="card-title">Capacidade de Pagamento</div>
+        <div style="font-size:12px;color:var(--label);line-height:1.6">${ia.diagnostico_pagamento || 'Não avaliado.'}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Risco Jurídico e Fiscal</div>
+        <div style="font-size:12px;color:var(--label);line-height:1.6">${ia.diagnostico_risco_juridico_fiscal || 'Não avaliado.'}</div>
+      </div>
+    </div>
+
     <div class="parecer-box">
       <div class="parecer-title"><div class="ai-dot"></div> Parecer Executivo — Gerado por IA</div>
       <div class="parecer-text">${ia.parecer}</div>
@@ -773,12 +795,21 @@ function renderReport(cnpjData, ia, contexto) {
       <div class="sugestao-grid">
         <div class="sug-item"><div class="sug-label">Limite Recomendado</div><div class="sug-valor verde">${ia.sugestao_limite}</div><div class="sug-sub">Crédito aprovável</div></div>
         <div class="sug-item"><div class="sug-label">Prazo Sugerido</div><div class="sug-valor">${ia.sugestao_prazo}</div><div class="sug-sub">Condição recomendada</div></div>
-        <div class="sug-item"><div class="sug-label">Produto Indicado</div><div class="sug-valor" style="font-size:13px">${ia.sugestao_produto}</div><div class="sug-sub">${ia.sugestao_condicao}</div></div>
+        <div class="sug-item"><div class="sug-label">Produto Indicado</div><div class="sug-valor" style="font-size:13px">${ia.sugestao_produto}</div><div class="sug-sub">Garantia: ${ia.sugestao_garantia || 'N/A'}</div></div>
       </div>
+      ${ia.sugestao_condicao ? `<div style="margin-top:12px;font-size:12px;color:var(--label);padding-top:12px;border-top:1px solid var(--border)">📌 ${ia.sugestao_condicao}</div>` : ''}
+    </div>
+
+    <div class="card" style="margin-bottom:20px;border-color:${corScore(ia.recomendacao_cor)}40">
+      <div class="card-title">Veredito Final</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <span class="badge ${badgeCor(ia.recomendacao_cor)}" style="font-size:14px;padding:8px 18px">${ia.recomendacao_final}</span>
+      </div>
+      <div style="font-size:12px;color:var(--label);line-height:1.6">${ia.recomendacao_justificativa || ''}</div>
     </div>
 
     <div class="report-footer">
-      <span>Relatório informativo baseado em dados públicos. Não substitui análise manual.</span>
+      <span>Relatório informativo baseado em dados públicos${arquivoAnexado ? ' e documento anexado pelo usuário' : ''}. Não substitui análise manual de um analista de crédito habilitado.</span>
       <div class="ai-tag"><div class="ai-dot"></div> claude-sonnet-4-6</div>
     </div>`;
 }

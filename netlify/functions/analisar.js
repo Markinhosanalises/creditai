@@ -9,7 +9,26 @@ exports.handler = async function(event) {
   }
 
   try {
-    const { prompt } = JSON.parse(event.body);
+    const { prompt, anexo } = JSON.parse(event.body);
+
+    // Monta o conteúdo da mensagem - com ou sem anexo
+    let content;
+    if (anexo && anexo.base64 && anexo.mediaType) {
+      const blockType = anexo.mediaType === 'application/pdf' ? 'document' : 'image';
+      content = [
+        {
+          type: blockType,
+          source: {
+            type: 'base64',
+            media_type: anexo.mediaType,
+            data: anexo.base64
+          }
+        },
+        { type: 'text', text: prompt }
+      ];
+    } else {
+      content = prompt;
+    }
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -21,7 +40,7 @@ exports.handler = async function(event) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{ role: 'user', content }]
       })
     });
 

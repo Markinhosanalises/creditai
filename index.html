@@ -360,6 +360,7 @@ body {
   .sugestao-grid { grid-template-columns: 1fr; }
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
 
@@ -448,6 +449,7 @@ body {
     <div class="logo-small" onclick="voltarHome()">Credit<span>AI</span></div>
     <div style="display:flex;gap:10px;align-items:center;">
       <span style="font-size:11px;color:var(--muted)" id="report-meta"></span>
+      <button class="btn-nova" id="btn-pdf" onclick="baixarPDF()">⬇ Baixar PDF</button>
       <button class="btn-nova" onclick="voltarHome()">← Nova consulta</button>
     </div>
   </div>
@@ -508,6 +510,47 @@ function voltarHome() {
   document.getElementById('screen-loading').style.display = 'none';
   document.getElementById('screen-home').style.display = 'flex';
   removerArquivo();
+}
+
+function baixarPDF() {
+  const btn = document.getElementById('btn-pdf');
+  const textoOriginal = btn.textContent;
+  btn.textContent = '⏳ Gerando PDF...';
+  btn.disabled = true;
+
+  // Esconde os botões de ação durante a captura
+  const header = document.querySelector('.report-header');
+  const headerDisplayOriginal = header.style.display;
+
+  const elemento = document.getElementById('report-content');
+  const nomeEmpresa = (document.querySelector('.empresa-nome')?.textContent || 'relatorio')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+
+  const opcoes = {
+    margin: [10, 8, 10, 8],
+    filename: `creditai-${nomeEmpresa}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: {
+      scale: 2,
+      backgroundColor: '#07090f',
+      useCORS: true
+    },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+  };
+
+  header.style.display = 'none';
+
+  html2pdf().set(opcoes).from(elemento).save().then(() => {
+    header.style.display = headerDisplayOriginal;
+    btn.textContent = textoOriginal;
+    btn.disabled = false;
+  }).catch((err) => {
+    header.style.display = headerDisplayOriginal;
+    btn.textContent = textoOriginal;
+    btn.disabled = false;
+    mostrarErro('Erro ao gerar PDF: ' + err.message);
+  });
 }
 
 function setStep(n) {
